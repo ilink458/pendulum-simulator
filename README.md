@@ -3,7 +3,7 @@
 - **实验者**：王浩然
 - **学号**：61081260
 - **课程**：人机协同程序设计
-- **GitHub 仓库**：https://github.com/（待填入个人作品集仓库地址）
+- **GitHub 仓库**：https://github.com/ilink458/pendulum-simulator
 
 ## 项目说明
 
