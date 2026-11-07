@@ -15,28 +15,131 @@
     min-height: 100vh;
     font-family: "Microsoft YaHei", sans-serif;
     color: #cfd2dc;
+    padding: 20px 0;
   }
   h1 { font-size: 20px; font-weight: 500; letter-spacing: 4px; margin-bottom: 12px; color: #8f94a8; }
   canvas { display: block; }
+
+  /* ===== 控制面板 ===== */
+  .panel {
+    width: 800px;
+    margin-top: 14px;
+    background: #22222f;
+    border: 1px solid #30304a;
+    border-radius: 10px;
+    padding: 14px 20px 16px;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+  }
+  .row label { width: 56px; font-size: 13px; color: #9aa0b8; }
+  .row output { width: 72px; font-size: 13px; color: #9fd8ff; font-variant-numeric: tabular-nums; }
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #3a3a55;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #9fd8ff;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(120, 200, 255, 0.8);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border: none;
+    border-radius: 50%;
+    background: #9fd8ff;
+    cursor: pointer;
+  }
+
+  .btns { display: flex; gap: 10px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+  button {
+    background: #2e2e44;
+    color: #cfd2dc;
+    border: 1px solid #44446a;
+    border-radius: 999px;
+    padding: 7px 18px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  button:hover { background: #3a3a58; box-shadow: 0 0 8px rgba(120, 200, 255, 0.25); }
+  button.active {
+    background: #2c4a66;
+    border-color: #6db6e8;
+    color: #bfe6ff;
+    box-shadow: 0 0 10px rgba(109, 182, 232, 0.4);
+  }
+  .divider { width: 1px; height: 20px; background: #3a3a55; margin: 0 4px; }
+  .hint { font-size: 12px; color: #6b7089; margin-left: auto; }
 </style>
 </head>
 <body>
 <h1>单摆物理模拟器</h1>
 <canvas id="scene" width="800" height="560"></canvas>
+
+<div class="panel">
+  <div class="row">
+    <label for="lenSlider">摆长</label>
+    <input type="range" id="lenSlider" min="100" max="350" step="1" value="200">
+    <output id="lenVal">200 px</output>
+  </div>
+  <div class="row">
+    <label for="gSlider">重力</label>
+    <input type="range" id="gSlider" min="1" max="25" step="0.1" value="9.8">
+    <output id="gVal">9.8</output>
+  </div>
+  <div class="row">
+    <label for="dampSlider">阻尼</label>
+    <input type="range" id="dampSlider" min="0" max="0.01" step="0.0005" value="0.002">
+    <output id="dampVal">0.0020</output>
+  </div>
+  <div class="btns">
+    <button id="resetBtn">重置摆动</button>
+    <span class="divider"></span>
+    <button class="scene-btn active" data-g="9.8">地球</button>
+    <button class="scene-btn" data-g="1.6">月球</button>
+    <button class="scene-btn" data-g="24.8">木星</button>
+    <button class="scene-btn" data-g="1.0">太空</button>
+    <span class="hint">参数自动保存，刷新后恢复</span>
+  </div>
+</div>
+
 <script>
 // ===== 物理参数 =====
 const P = {
-  L: 200,          // 摆长（像素）
-  g: 9.8,          // 重力加速度
-  damping: 0.002,  // 空气阻尼系数 k
-  theta: Math.PI / 4, // 摆角（弧度），初始 45°
-  omega: 0         // 角速度
+  L: 200,               // 摆长（像素）
+  g: 9.8,               // 重力加速度
+  damping: 0.002,       // 空气阻尼系数 k
+  theta: Math.PI / 4,   // 摆角（弧度），初始 45°
+  omega: 0              // 角速度
 };
-const G_SCALE = 60;  // 将 g 映射为像素单位加速度，保证视觉上节奏合适
+const G_SCALE = 60;     // 将 g 映射为像素单位加速度，保证视觉上节奏合适
+const STORAGE_KEY = 'pendulum_params_v1';
 
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
 const pivot = { x: canvas.width / 2, y: 90 };
+
+// ===== DOM 引用 =====
+const lenSlider = document.getElementById('lenSlider');
+const gSlider = document.getElementById('gSlider');
+const dampSlider = document.getElementById('dampSlider');
+const lenVal = document.getElementById('lenVal');
+const gVal = document.getElementById('gVal');
+const dampVal = document.getElementById('dampVal');
+const resetBtn = document.getElementById('resetBtn');
+const sceneBtns = document.querySelectorAll('.scene-btn');
 
 // ===== 物理步进（半隐式欧拉）=====
 // 角加速度 α = -(g/L)·sin(θ) - k·ω
@@ -89,12 +192,100 @@ function loop(now) {
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.05);
-  // 子步进提升稳定性
+  // 子步进提升数值稳定性
   const sub = 4;
   for (let i = 0; i < sub; i++) step(dt / sub);
   draw();
   requestAnimationFrame(loop);
 }
+
+// ===== 交互绑定 =====
+function syncLabels() {
+  lenVal.textContent = P.L.toFixed(0) + ' px';
+  gVal.textContent = P.g.toFixed(1);
+  dampVal.textContent = P.damping.toFixed(4);
+}
+
+function saveParams() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      L: P.L, g: P.g, damping: P.damping
+    }));
+  } catch (e) { /* 隐私模式等场景下静默降级 */ }
+}
+
+function loadParams() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (typeof s.L === 'number') P.L = Math.min(350, Math.max(100, s.L));
+    if (typeof s.g === 'number') P.g = Math.min(25, Math.max(1, s.g));
+    if (typeof s.damping === 'number') P.damping = Math.min(0.01, Math.max(0, s.damping));
+  } catch (e) { /* 缓存损坏时忽略，使用默认值 */ }
+}
+
+lenSlider.addEventListener('input', () => {
+  P.L = parseFloat(lenSlider.value);
+  syncLabels();
+  saveParams();
+});
+
+gSlider.addEventListener('input', () => {
+  P.g = parseFloat(gSlider.value);
+  syncLabels();
+  markActiveScene(P.g);
+  saveParams();
+});
+
+dampSlider.addEventListener('input', () => {
+  P.damping = parseFloat(dampSlider.value);
+  syncLabels();
+  saveParams();
+});
+
+// 重置：摆球回到 45° 初始状态
+function resetAnimation() {
+  P.theta = Math.PI / 4;
+  P.omega = 0;
+}
+resetBtn.addEventListener('click', resetAnimation);
+
+// ===== 进阶挑战 B：天体预设场景（平滑过渡） =====
+let gTarget = null;
+function markActiveScene(g) {
+  sceneBtns.forEach(b => {
+    b.classList.toggle('active', Math.abs(parseFloat(b.dataset.g) - g) < 0.05);
+  });
+}
+sceneBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    gTarget = parseFloat(btn.dataset.g);
+    markActiveScene(gTarget);
+  });
+});
+// 在动画循环外以定时器平滑逼近目标重力，并联动滑块
+setInterval(() => {
+  if (gTarget === null) return;
+  const diff = gTarget - P.g;
+  if (Math.abs(diff) < 0.05) {
+    P.g = gTarget;
+    gTarget = null;
+  } else {
+    P.g += diff * 0.15;
+  }
+  gSlider.value = P.g;
+  syncLabels();
+  saveParams();
+}, 16);
+
+// ===== 启动：恢复上次参数 =====
+loadParams();
+lenSlider.value = P.L;
+gSlider.value = P.g;
+dampSlider.value = P.damping;
+syncLabels();
+markActiveScene(P.g);
 requestAnimationFrame(loop);
 </script>
 </body>
