@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单摆物理模拟器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a24;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: "Microsoft YaHei", sans-serif;
+    color: #cfd2dc;
+  }
+  h1 { font-size: 20px; font-weight: 500; letter-spacing: 4px; margin-bottom: 12px; color: #8f94a8; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<h1>单摆物理模拟器</h1>
+<canvas id="scene" width="800" height="560"></canvas>
+<script>
+// ===== 物理参数 =====
+const P = {
+  L: 200,          // 摆长（像素）
+  g: 9.8,          // 重力加速度
+  damping: 0.002,  // 空气阻尼系数 k
+  theta: Math.PI / 4, // 摆角（弧度），初始 45°
+  omega: 0         // 角速度
+};
+const G_SCALE = 60;  // 将 g 映射为像素单位加速度，保证视觉上节奏合适
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+const pivot = { x: canvas.width / 2, y: 90 };
+
+// ===== 物理步进（半隐式欧拉）=====
+// 角加速度 α = -(g/L)·sin(θ) - k·ω
+function step(dt) {
+  const alpha = -(P.g * G_SCALE / P.L) * Math.sin(P.theta) - P.damping * P.omega;
+  P.omega += alpha * dt;
+  P.theta += P.omega * dt;
+}
+
+// ===== 渲染 =====
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const bx = pivot.x + P.L * Math.sin(P.theta);
+  const by = pivot.y + P.L * Math.cos(P.theta);
+
+  // 悬点
+  ctx.fillStyle = '#5a5f75';
+  ctx.beginPath();
+  ctx.arc(pivot.x, pivot.y, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 摆线
+  ctx.strokeStyle = '#7d83a0';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pivot.x, pivot.y);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+
+  // 发光摆球
+  const glow = ctx.createRadialGradient(bx, by, 2, bx, by, 40);
+  glow.addColorStop(0, 'rgba(120, 200, 255, 0.9)');
+  glow.addColorStop(0.4, 'rgba(80, 150, 255, 0.25)');
+  glow.addColorStop(1, 'rgba(80, 150, 255, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(bx, by, 40, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#9fd8ff';
+  ctx.beginPath();
+  ctx.arc(bx, by, 16, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ===== 动画循环 =====
+let last = performance.now();
+function loop(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  dt = Math.min(dt, 0.05);
+  // 子步进提升稳定性
+  const sub = 4;
+  for (let i = 0; i < sub; i++) step(dt / sub);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
